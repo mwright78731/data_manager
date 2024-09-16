@@ -1,0 +1,9 @@
+[package]
+name = "data_manager"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hex = "0.4.3"
+tokio = { version = "1.40.0", features = ["full"] }
+reqwest = "0.12.7"
