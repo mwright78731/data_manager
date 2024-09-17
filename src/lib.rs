@@ -11,7 +11,7 @@ use tokio::fs;
 pub type DatasetId = [u8; 32];
 pub type ChunkId = [u8; 32];
 
-const MAX_DOWNLOAD_PARALLELISM: usize = 10; 
+const MAX_DOWNLOAD_PARALLELISM: usize = 30; // Total number of parallel downloads 
 const MAX_STORAGE_SIZE: u64 = 1 * 1024 * 1024 * 1024 * 1024; // 1 TB in bytes
 const MIN_FILE_SPACE: u64 = 10 * 1024 * 1024;
 
@@ -83,6 +83,7 @@ pub struct HttpDataManager {
     data_dir: PathBuf,
     chunks: Arc<Mutex<HashMap<ChunkId, DataChunk>>>,
     current_data_size: Arc<Mutex<u64>>,
+    thread_limit_semaphore: Arc<Semaphore>,
 }
 
 impl HttpDataManager {
@@ -112,6 +113,7 @@ impl HttpDataManager {
             data_dir,
             chunks: Arc::new(Mutex::new(HashMap::new())),
             current_data_size: Arc::new(Mutex::new(initial_size)),
+            thread_limit_semaphore: Arc::new(Semaphore::new(MAX_DOWNLOAD_PARALLELISM)),
         }
     }
 }
@@ -130,7 +132,7 @@ impl DataManager for HttpDataManager {
         let data_dir = self.data_dir.clone();
         let chunks = self.chunks.clone();
         let current_size = self.current_data_size.clone();
-        let semaphore = Arc::new(Semaphore::new(MAX_DOWNLOAD_PARALLELISM)); // Use the constant here
+        let thread_limit_semaphore = self.thread_limit_semaphore.clone();
         let failed_download_count = Arc::new(Mutex::new(0));
         
         tokio::spawn(async move {
@@ -145,7 +147,7 @@ impl DataManager for HttpDataManager {
                 let complete_file_path = chunk_dir.join(format!("{}.complete", file_name));
                 let error_file_path = chunk_dir.join(format!("{}.error", file_name));
                 let client = client.clone();
-                let permit = semaphore.clone().acquire_owned().await.unwrap();
+                let permit = thread_limit_semaphore.clone().acquire_owned().await.unwrap();
                 let failed_download_count = failed_download_count.clone();
                 let current_size = current_size.clone();
     
